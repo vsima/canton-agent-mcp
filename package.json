@@ -1,0 +1,38 @@
+{
+  "name": "canton-agent-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that lets AI agents pay on the Canton Network through a human's mobile wallet: the agent asks, the human approves on their phone, hardware signs.",
+  "license": "Apache-2.0",
+  "author": "Victor Sima",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vsima/canton-agent-mcp.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "bin": {
+    "canton-agent-mcp": "src/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "tsc && node --test 'test/**/*.test.ts'",
+    "probe": "node src/probe.ts",
+    "headers": "tools/check-license-headers.sh"
+  },
+  "dependencies": {
+    "@canton-network/wallet-sdk": "^1.4.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@walletconnect/core": "^2.23.10",
+    "@walletconnect/sign-client": "^2.23.10",
+    "pino": "^9.0.0",
+    "qrcode": "^1.5.4",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.6",
+    "typescript": "^5.7.0"
+  }
+}
