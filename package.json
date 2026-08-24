@@ -19,6 +19,7 @@
     "typecheck": "tsc",
     "test": "tsc && node --test 'test/**/*.test.ts'",
     "probe": "node src/probe.ts",
+    "embedded-demo": "node src/embedded-demo.ts",
     "headers": "tools/check-license-headers.sh"
   },
   "dependencies": {

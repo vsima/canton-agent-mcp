@@ -52,6 +52,34 @@ Then ask the agent to connect your wallet and pay someone. A payment request
 blocks until the human decides, so raise your MCP client's tool timeout if it
 cuts long calls short (in Claude Code: the `MCP_TIMEOUT` environment variable).
 
+## Custody modes: linked, embedded, tiered
+
+Set `AGENT_WALLET_MODE` to choose who holds the keys:
+
+- **`linked`** (default): the human's phone wallet over WalletConnect. The
+  agent holds nothing; every action is approved on the phone and signed by
+  the device key.
+- **`embedded`**: an agent-held allowance. The server creates its own Canton
+  party and keeps the key locally (mode 0600, optionally
+  passphrase-encrypted). Every payment passes a hard spend policy before
+  anything is signed: a per-payment cap, a daily cap, an instrument
+  allowlist, and an optional receiver allowlist, all fail-closed, with a
+  receipts log the caps are computed from. This is a hot wallet by design:
+  fund it from your real wallet with only what you are willing to delegate.
+- **`tiered`**: both. Payments at or under `AGENT_WALLET_ESCALATE_ABOVE` run
+  autonomously on the embedded allowance; anything larger, and anything the
+  policy refuses, escalates to the phone for a human approval and a hardware
+  signature. The agent sees one wallet; the human keeps the decisions that
+  matter.
+
+Embedded-mode settings: `AGENT_WALLET_DIR`, `AGENT_WALLET_PASSPHRASE`,
+`AGENT_WALLET_HINT`, `AGENT_WALLET_MAX_PER_TX` (default 5),
+`AGENT_WALLET_DAILY_CAP` (default 25), `AGENT_WALLET_INSTRUMENTS` (default
+`Amulet`), `AGENT_WALLET_RECEIVERS` (comma-separated allowlist), and
+`AGENT_WALLET_ESCALATE_ABOVE` for tiered routing. On test networks the
+`canton_fund_wallet` tool mints the allowance; `npm run embedded-demo` runs
+the whole loop live against a LocalNet.
+
 ## Tools
 
 | Tool | What it does |
@@ -62,6 +90,7 @@ cuts long calls short (in Claude Code: the `MCP_TIMEOUT` environment variable).
 | `canton_sign_in` | Sign-In with Canton: a signed, verified proof of the party |
 | `canton_request_payment` | Pushes a Token Standard transfer for approval on the phone |
 | `canton_disconnect` | Ends the session |
+| `canton_fund_wallet` | Mints test funds into the embedded allowance (test networks, embedded/tiered modes only) |
 
 ## Configuration
 

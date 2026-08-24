@@ -34,7 +34,12 @@ function fail(e: unknown): ToolResult {
 
 const AMOUNT = /^\d+(\.\d{1,10})?$/;
 
-export function registerTools(server: McpServer, link: AgentWalletLink): void {
+export interface ToolExtras {
+  /** Test-network funding for an embedded wallet; registers canton_fund_wallet. */
+  fund?: (amount: string) => Promise<{ updateId: string }>;
+}
+
+export function registerTools(server: McpServer, link: AgentWalletLink, extras: ToolExtras = {}): void {
   server.registerTool(
     'canton_wallet_status',
     {
@@ -48,10 +53,11 @@ export function registerTools(server: McpServer, link: AgentWalletLink): void {
         const s = await link.status();
         const lines = [
           s.connected
-            ? `Connected to ${s.walletName ?? 'a wallet'} (session ${s.topic?.slice(0, 12)}…).`
+            ? `Connected to ${s.walletName ?? 'a wallet'}${s.topic !== undefined ? ` (session ${s.topic.slice(0, 12)}…)` : ''}.`
             : 'No wallet connected.',
           s.pairingPending ? 'A pairing QR is out, waiting for the wallet to scan and approve.' : '',
           `Network: ${s.networkId}.`,
+          s.detail ?? '',
         ].filter((l) => l !== '');
         return ok(lines.join('\n'));
       } catch (e) {
@@ -155,6 +161,7 @@ export function registerTools(server: McpServer, link: AgentWalletLink): void {
             `Payment ${result.status}.`,
             result.updateId !== undefined ? `Update id: ${result.updateId}` : '',
             `Sender: ${result.sender}`,
+            result.note !== undefined ? `Route: ${result.note}` : '',
           ]
             .filter((l) => l !== '')
             .join('\n'),
@@ -181,4 +188,27 @@ export function registerTools(server: McpServer, link: AgentWalletLink): void {
       }
     },
   );
+
+  if (extras.fund !== undefined) {
+    const fund = extras.fund;
+    server.registerTool(
+      'canton_fund_wallet',
+      {
+        title: 'Fund the embedded wallet (test networks)',
+        description:
+          "Mints test funds into the embedded wallet's allowance. Only available on test networks (LocalNet/DevNet); on real networks the human funds the allowance with a transfer from their own wallet.",
+        inputSchema: {
+          amount: z.string().regex(AMOUNT).describe('Decimal amount as a string, e.g. "25".'),
+        },
+      },
+      async ({ amount }) => {
+        try {
+          const { updateId } = await fund(amount);
+          return ok(`Funded ${amount}. Update id: ${updateId}`);
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+  }
 }
