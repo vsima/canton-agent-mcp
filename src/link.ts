@@ -12,7 +12,7 @@ import { DappConnector } from './wc/dapp.ts';
 import type { WcMetadata } from './wc/client.ts';
 import type { DappAccount } from './wc/protocol.ts';
 import { buildSignInMessage, verifySignature } from './siwc.ts';
-import { buildTransferCommand } from './payment.ts';
+import { sdkGateway } from './canton.ts';
 
 export interface LinkConfig {
   projectId: string;
@@ -38,6 +38,8 @@ export interface LinkStatus {
   /** Set while a pairing URI is out and no wallet has approved yet. */
   pairingPending: boolean;
   networkId: string;
+  /** Extra display lines a backend wants shown (budget, routing, party). */
+  detail?: string;
 }
 
 export interface PayRequest {
@@ -51,6 +53,10 @@ export interface PayResult {
   status: string;
   updateId?: string;
   sender: string;
+  /** Which custody path executed the payment, when the backend routes. */
+  route?: 'embedded' | 'phone';
+  /** A backend's one-line explanation of the routing decision. */
+  note?: string;
 }
 
 export class WalletLink {
@@ -182,12 +188,12 @@ export class WalletLink {
     const accounts = await this.accounts();
     const account = accounts.find((a) => a.primary) ?? accounts[0];
     if (account === undefined) throw new Error('the wallet shared no accounts');
-    const { command, disclosedContracts } = await buildTransferCommand({
+    const { command, disclosedContracts } = await sdkGateway.buildTransfer({
       sender: account.partyId,
       recipient: request.to,
       amount: request.amount,
       instrumentId: request.instrument ?? 'Amulet',
-      memo: request.memo,
+      ...(request.memo !== undefined ? { memo: request.memo } : {}),
     });
     const result = await dapp.prepareExecuteAndWait(topic, {
       commands: [command],
