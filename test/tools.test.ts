@@ -105,6 +105,11 @@ test('connect_wallet hands back the pairing URI and a QR', async () => {
   assert.match(text, /URI: wc:abc123@2/);
   assert.match(text, /canton_wallet_status/);
   assert.equal(link.pairings, 1);
+  // The QR must be relay-safe: pure block characters an agent can echo into
+  // chat, never ANSI escape sequences (those got dropped in the live M1 run).
+  assert.match(text, /[█▀▄]/);
+  assert.ok(!text.includes(String.fromCharCode(27)), 'QR output must contain no ANSI escape codes');
+  assert.match(text, /EXACTLY as-is/);
 });
 
 test('connect_wallet short-circuits when already connected', async () => {

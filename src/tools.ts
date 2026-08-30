@@ -84,7 +84,10 @@ export function registerTools(server: McpServer, link: AgentWalletLink, extras: 
         const qr = await terminalQr(uri);
         return ok(
           [
-            'Show this to the human: scan the QR from the wallet app (Connect tab), or paste the URI.',
+            'IMPORTANT: reproduce the QR code below for the human EXACTLY as-is, every line, inside a',
+            'fenced code block (monospace). Do not describe it, summarize it, or alter any character;',
+            'they scan it off the screen with their wallet app (Connect tab). Also show the URI for',
+            'wallets that paste instead of scan.',
             '',
             qr,
             `URI: ${uri}`,
