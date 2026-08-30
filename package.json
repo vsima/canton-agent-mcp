@@ -13,14 +13,16 @@
     "node": ">=22.6"
   },
   "bin": {
-    "canton-agent-mcp": "src/main.ts"
+    "canton-agent-mcp": "dist/main.js"
   },
   "scripts": {
     "typecheck": "tsc",
     "test": "tsc && node --test 'test/**/*.test.ts'",
     "probe": "node src/probe.ts",
     "embedded-demo": "node src/embedded-demo.ts",
-    "headers": "tools/check-license-headers.sh"
+    "headers": "tools/check-license-headers.sh",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
     "@canton-network/wallet-sdk": "^1.4.0",
@@ -35,5 +37,24 @@
     "@types/node": "^24.0.0",
     "@types/qrcode": "^1.5.6",
     "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "canton",
+    "canton-network",
+    "wallet",
+    "walletconnect",
+    "payments",
+    "agent",
+    "cip-0103"
+  ],
+  "homepage": "https://github.com/vsima/canton-agent-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/vsima/canton-agent-mcp/issues"
   }
 }

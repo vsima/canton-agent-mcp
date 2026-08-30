@@ -31,26 +31,80 @@ Android, built on the native
 [canton-mobile-sdk](https://github.com/vsima/canton-mobile-sdk)), but any
 CIP-0103 wallet that speaks WalletConnect works.
 
-## Quickstart
+## Install
 
-Requires Node 22.6+ (the server runs TypeScript directly, no build step) and a
-free WalletConnect Cloud project id.
+Requires Node 22.6+ and a free WalletConnect project id from
+[dashboard.reown.com](https://dashboard.reown.com). The id is a public client
+key, not a secret.
+
+The server is on npm, so every harness below runs it with `npx` and nothing
+to clone. Then ask the agent to connect your wallet and pay someone. A payment
+request blocks until the human decides, so raise your MCP client's tool
+timeout if it cuts long calls short (in Claude Code: the `MCP_TIMEOUT`
+environment variable).
+
+### Claude Code
+
+```sh
+claude mcp add canton-agent --env WC_PROJECT_ID=<your-project-id> \
+  -- npx -y canton-agent-mcp
+```
+
+### Claude Desktop
+
+Settings → Developer → Edit Config, then add the server to
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "canton-agent": {
+      "command": "npx",
+      "args": ["-y", "canton-agent-mcp"],
+      "env": { "WC_PROJECT_ID": "<your-project-id>" }
+    }
+  }
+}
+```
+
+### Cursor
+
+The same JSON shape in `~/.cursor/mcp.json` (global) or the project's
+`.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "canton-agent": {
+      "command": "npx",
+      "args": ["-y", "canton-agent-mcp"],
+      "env": { "WC_PROJECT_ID": "<your-project-id>" }
+    }
+  }
+}
+```
+
+### Codex CLI
+
+In `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.canton-agent]
+command = "npx"
+args = ["-y", "canton-agent-mcp"]
+env = { "WC_PROJECT_ID" = "<your-project-id>" }
+```
+
+### From source
+
+The repo runs TypeScript directly on Node 22.6+, no build step:
 
 ```sh
 git clone https://github.com/vsima/canton-agent-mcp
 cd canton-agent-mcp && npm install
-```
-
-Register it with Claude Code:
-
-```sh
 claude mcp add canton-agent --env WC_PROJECT_ID=<your-project-id> \
   -- node <path-to>/canton-agent-mcp/src/main.ts
 ```
-
-Then ask the agent to connect your wallet and pay someone. A payment request
-blocks until the human decides, so raise your MCP client's tool timeout if it
-cuts long calls short (in Claude Code: the `MCP_TIMEOUT` environment variable).
 
 ## Custody modes: linked, embedded, tiered
 
