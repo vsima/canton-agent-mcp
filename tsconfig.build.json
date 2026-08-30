@@ -1,0 +1,15 @@
+{
+  // Publish build: the repo runs .ts directly (Node 22.6+ type stripping),
+  // but Node refuses to strip types inside node_modules, so the npm package
+  // ships compiled JS. rewriteRelativeImportExtensions turns the source's
+  // `./x.ts` imports into `./x.js` on emit.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rewriteRelativeImportExtensions": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["src"]
+}
