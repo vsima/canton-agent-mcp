@@ -12,7 +12,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
-import { registerTools, type AgentWalletLink } from '../src/tools.ts';
+import { registerTools, type AgentWalletLink, type ToolExtras } from '../src/tools.ts';
 import type { DappAccount } from '../src/wc/protocol.ts';
 import type { LinkStatus, PayRequest, PayResult } from '../src/link.ts';
 
@@ -32,6 +32,8 @@ class FakeLink implements AgentWalletLink {
   pairings = 0;
   payRequests: PayRequest[] = [];
   failPayWith: string | null = null;
+  /** Simulates the human taking this long to decide. */
+  payDelayMs = 0;
 
   async status(): Promise<LinkStatus> {
     return {
@@ -53,6 +55,7 @@ class FakeLink implements AgentWalletLink {
   }
   async pay(request: PayRequest): Promise<PayResult> {
     if (this.failPayWith !== null) throw new Error(this.failPayWith);
+    if (this.payDelayMs > 0) await new Promise((r) => setTimeout(r, this.payDelayMs));
     this.payRequests.push(request);
     return { status: 'executed', updateId: 'upd-42', sender: ACCOUNT.partyId };
   }
@@ -63,9 +66,9 @@ class FakeLink implements AgentWalletLink {
   }
 }
 
-async function connectedPair(link: FakeLink): Promise<Client> {
+async function connectedPair(link: FakeLink, extras: ToolExtras = {}): Promise<Client> {
   const server = new McpServer({ name: 'canton-agent-mcp-test', version: '0.0.0' });
-  registerTools(server, link);
+  registerTools(server, link, extras);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test-agent', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -181,4 +184,19 @@ test('disconnect reports whether a session existed', async () => {
   const client = await connectedPair(link);
   assert.match(textOf(await client.callTool({ name: 'canton_disconnect', arguments: {} })), /Disconnected/);
   assert.match(textOf(await client.callTool({ name: 'canton_disconnect', arguments: {} })), /No session/);
+});
+
+test('a payment that waits on the human reports progress to the harness', async () => {
+  const link = new FakeLink();
+  link.payDelayMs = 60;
+  const client = await connectedPair(link, { progressIntervalMs: 10 });
+  const seen: string[] = [];
+  const result = await client.callTool(
+    { name: 'canton_request_payment', arguments: { to: 'bob::1220bb', amount: '3' } },
+    undefined,
+    { onprogress: (p) => seen.push(p.message ?? '') },
+  );
+  assert.match(textOf(result), /Payment executed/);
+  assert.ok(seen.length >= 1, 'at least one progress notification while waiting');
+  assert.match(seen[0] ?? '', /phone/);
 });

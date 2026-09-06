@@ -9,7 +9,8 @@
 // this side only asks and reads the reply.
 
 import type { SessionTypes } from '@walletconnect/types';
-import { makeSignClient } from './client.ts';
+import { makeSignClient, stderrLog } from './client.ts';
+import { withTransportNudges } from './nudge.ts';
 import type { WcConfig, WcMetadata, WcSignClient } from './client.ts';
 import { ALL_METHODS, CANTON_METHODS, CANTON_NAMESPACE, chainId } from './protocol.ts';
 import type {
@@ -71,37 +72,47 @@ export class DappConnector {
     return { uri, approved: approval() };
   }
 
-  /** Request a connection, the wallet grants accounts (prompts the user). */
-  async connect(topic: string): Promise<ConnectResult> {
-    return this.client.request<ConnectResult>({
+  /**
+   * One request to the wallet. The wallet's answer may take as long as the
+   * human takes, so the wait is nudged: a relay socket that closes meanwhile
+   * is reopened, and a quiet one is restarted now and then so an answer
+   * parked in the relay's mailbox is fetched rather than waited on forever.
+   */
+  private async ask<T>(topic: string, label: string, request: { method: string; params: unknown }): Promise<T> {
+    const relayer = this.client.core.relayer;
+    stderrLog(`relay: sending ${label} (socket ${relayer.connected ? 'open' : 'closed'})`);
+    const pending = this.client.request<T>({
       topic,
       chainId: this.chain,
-      request: { method: CANTON_METHODS.connect, params: {} },
+      request,
       expiry: this.requestExpirySecs,
     });
+    try {
+      const answer = await withTransportNudges(pending, relayer, { log: stderrLog });
+      stderrLog(`relay: ${label} answered`);
+      return answer;
+    } catch (e) {
+      stderrLog(`relay: ${label} failed: ${(e as Error).message}`);
+      throw e;
+    }
+  }
+
+  /** Request a connection, the wallet grants accounts (prompts the user). */
+  async connect(topic: string): Promise<ConnectResult> {
+    return this.ask<ConnectResult>(topic, 'connect', { method: CANTON_METHODS.connect, params: {} });
   }
 
   /** The accounts the wallet granted this dApp, each carries its `publicKey`,
    *  which a Sign-In signature verifies against. */
   async listAccounts(topic: string): Promise<DappAccount[]> {
-    return this.client.request<DappAccount[]>({
-      topic,
-      chainId: this.chain,
-      request: { method: CANTON_METHODS.listAccounts, params: {} },
-      expiry: this.requestExpirySecs,
-    });
+    return this.ask<DappAccount[]>(topic, 'listAccounts', { method: CANTON_METHODS.listAccounts, params: {} });
   }
 
   /** Ask the wallet to sign a message (Sign-In with Canton over the session).
    *  The result carries only the signature, verify it against the account's
    *  `publicKey` from {@link listAccounts}. */
   async requestSignMessage(topic: string, message: string): Promise<SignMessageResult> {
-    return this.client.request<SignMessageResult>({
-      topic,
-      chainId: this.chain,
-      request: { method: CANTON_METHODS.signMessage, params: { message } },
-      expiry: this.requestExpirySecs,
-    });
+    return this.ask<SignMessageResult>(topic, 'signMessage', { method: CANTON_METHODS.signMessage, params: { message } });
   }
 
   /** Push prepared commands (a Token Standard transfer) to the wallet as a
@@ -109,11 +120,9 @@ export class DappConnector {
    *  prepares on its participant, verifies the prepared-tx hash, signs in its
    *  enclave, and executes; this resolves with the executed transaction. */
   async prepareExecuteAndWait(topic: string, submission: PrepareSubmission): Promise<ExecutedResult> {
-    return this.client.request<ExecutedResult>({
-      topic,
-      chainId: this.chain,
-      request: { method: CANTON_METHODS.prepareExecuteAndWait, params: submission },
-      expiry: this.requestExpirySecs,
+    return this.ask<ExecutedResult>(topic, 'prepareExecuteAndWait', {
+      method: CANTON_METHODS.prepareExecuteAndWait,
+      params: submission,
     });
   }
 
