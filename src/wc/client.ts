@@ -7,9 +7,34 @@
 // each other's storage; `customStoragePrefix` gives each its own. A projectId
 // (free, from cloud.reown.com) authenticates to the public relay.
 
-import { Core } from '@walletconnect/core';
+import { Core, RELAYER_EVENTS } from '@walletconnect/core';
 import { SignClient } from '@walletconnect/sign-client';
 import { pino, destination } from 'pino';
+
+/**
+ * One timestamped line on stderr (stdout is the MCP framing). This is the
+ * server's only diagnostic channel; the agent harness captures it.
+ */
+export function stderrLog(line: string): void {
+  process.stderr.write(`[canton-agent-mcp ${new Date().toISOString()}] ${line}\n`);
+}
+
+/**
+ * Logs every relay socket transition. A lost answer or a late request
+ * always lines up with one of these, and without them the relay layer is
+ * a black box: the public relay drops quiet connections, and the Node
+ * relayer only notices when a server ping stops arriving.
+ */
+export function logRelayerEvents(client: WcSignClient, log: (line: string) => void = stderrLog): void {
+  const relayer = client.core.relayer;
+  const names = ['connect', 'disconnect', 'error', 'connection_stalled', 'transport_closed'] as const;
+  for (const name of names) {
+    relayer.on(RELAYER_EVENTS[name], (payload?: unknown) => {
+      const detail = payload instanceof Error ? ` ${payload.message}` : '';
+      log(`relay: ${name}${detail}`);
+    });
+  }
+}
 
 /** A ready WalletConnect Sign client, whatever `SignClient.init` resolves to. */
 export type WcSignClient = Awaited<ReturnType<typeof SignClient.init>>;
@@ -54,5 +79,8 @@ export async function makeSignClient(config: WcConfig, storagePrefix: string, me
     logger,
     ...(config.storageDir !== undefined ? { storageOptions: { database: config.storageDir } } : {}),
   });
-  return SignClient.init({ core, metadata });
+  const client = await SignClient.init({ core, metadata });
+  logRelayerEvents(client);
+  stderrLog(`relay: client ready (${relayUrl}, socket ${client.core.relayer.connected ? 'open' : 'closed'})`);
+  return client;
 }

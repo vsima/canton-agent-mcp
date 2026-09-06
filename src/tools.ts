@@ -7,6 +7,8 @@
 // interface so tests drive the tools without a relay.
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { DappAccount } from './wc/protocol.ts';
 import type { LinkStatus, PayRequest, PayResult } from './link.ts';
@@ -37,9 +39,39 @@ const AMOUNT = /^\d+(\.\d{1,10})?$/;
 export interface ToolExtras {
   /** Test-network funding for an embedded wallet; registers canton_fund_wallet. */
   fund?: (amount: string) => Promise<{ updateId: string }>;
+  /** How often a waiting tool reports progress to the agent harness. */
+  progressIntervalMs?: number;
+}
+
+type ToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
+
+/**
+ * A tool that waits on a human can wait a long time, and an agent harness
+ * treats a silent tool as hung (Claude Code aborts one after 30 minutes).
+ * While `work` is pending this sends a progress notification on the
+ * caller's progress token, when it supplied one, so the wait reads as
+ * alive: "still waiting for the phone".
+ */
+async function whileWaiting<T>(extra: ToolExtra, message: string, work: Promise<T>, intervalMs: number): Promise<T> {
+  const token = extra._meta?.progressToken;
+  if (token === undefined) return work;
+  let n = 0;
+  const timer = setInterval(() => {
+    n += 1;
+    void extra
+      .sendNotification({ method: 'notifications/progress', params: { progressToken: token, progress: n, message } })
+      .catch(() => {});
+  }, intervalMs);
+  timer.unref();
+  try {
+    return await work;
+  } finally {
+    clearInterval(timer);
+  }
 }
 
 export function registerTools(server: McpServer, link: AgentWalletLink, extras: ToolExtras = {}): void {
+  const progressEvery = extras.progressIntervalMs ?? 20_000;
   server.registerTool(
     'canton_wallet_status',
     {
@@ -109,9 +141,9 @@ export function registerTools(server: McpServer, link: AgentWalletLink, extras: 
         'The Canton parties the wallet has granted this agent, with their public keys. The first call prompts the human to approve the connection on their phone.',
       inputSchema: {},
     },
-    async () => {
+    async (_args, extra) => {
       try {
-        const accounts = await link.accounts();
+        const accounts = await whileWaiting(extra, 'Waiting for the human to approve the connection on their phone.', link.accounts(), progressEvery);
         if (accounts.length === 0) return ok('The wallet granted no accounts.');
         const lines = accounts.map(
           (a) => `${a.primary ? '* ' : '  '}${a.partyId} (${a.hint}, ${a.status}, network ${a.networkId})`,
@@ -133,9 +165,9 @@ export function registerTools(server: McpServer, link: AgentWalletLink, extras: 
         statement: z.string().max(200).optional().describe('Shown to the human on the approval sheet.'),
       },
     },
-    async ({ statement }) => {
+    async ({ statement }, extra) => {
       try {
-        const { party } = await link.signIn(statement);
+        const { party } = await whileWaiting(extra, 'Waiting for the human to sign in on their phone.', link.signIn(statement), progressEvery);
         return ok(`Signed in. Verified party: ${party}`);
       } catch (e) {
         return fail(e);
@@ -156,9 +188,14 @@ export function registerTools(server: McpServer, link: AgentWalletLink, extras: 
         memo: z.string().max(140).optional().describe('Shown to the human and recorded on the transfer.'),
       },
     },
-    async ({ to, amount, instrument, memo }) => {
+    async ({ to, amount, instrument, memo }, extra) => {
       try {
-        const result = await link.pay({ to, amount, ...(instrument !== undefined ? { instrument } : {}), ...(memo !== undefined ? { memo } : {}) });
+        const result = await whileWaiting(
+          extra,
+          'Waiting for the human to decide on their phone.',
+          link.pay({ to, amount, ...(instrument !== undefined ? { instrument } : {}), ...(memo !== undefined ? { memo } : {}) }),
+          progressEvery,
+        );
         return ok(
           [
             `Payment ${result.status}.`,
