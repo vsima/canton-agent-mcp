@@ -170,10 +170,23 @@ Payments default to a local [Splice LocalNet](https://github.com/digital-asset/d
 - Every sign-in and payment needs an explicit approval on the phone.
 - The wallet re-derives and verifies the prepared-transaction hash on device
   before its hardware key signs, so the phone can only sign what it showed.
-- Requests expire (an hour by default); the relay stores them encrypted.
-- Wallet-side spend policy (per-agent caps and allowlists, enforced by the
-  wallet before signing) is the next milestone in the
-  [native SDK](https://github.com/vsima/canton-mobile-sdk).
+- Requests expire (an hour by default); the relay stores them encrypted,
+  and a wallet built on the native SDK learns the same deadline, so a
+  request the human set aside is declined when this server stops waiting.
+- **The wallet sets the limits, not the agent.** A wallet built on the
+  [native SDK](https://github.com/vsima/canton-mobile-sdk) keeps a per-agent
+  spend policy: a per-payment cap, a rolling daily cap, instrument and
+  receiver allowlists, and an optional amount under which payments are
+  approved without asking the human. It is enforced by the wallet before
+  its owner is asked or anything is signed. This server cannot read or
+  change it; it only sees the outcome: a refused payment comes back as `Error: spend policy: …`, a
+  declined one as `Error: Declined`, one left past its deadline as
+  `Error: Expired before you answered`, and an auto-approved one simply
+  executes. Details in the SDK's
+  [bounded autonomy guide](https://github.com/vsima/canton-mobile-sdk/blob/main/docs/agent-spend-policy.md).
+- Tools that wait on the human (`canton_accounts`, `canton_sign_in`,
+  `canton_request_payment`) report progress to the agent harness every
+  20 seconds, so a long human decision is not mistaken for a hung tool.
 
 ## Development
 
